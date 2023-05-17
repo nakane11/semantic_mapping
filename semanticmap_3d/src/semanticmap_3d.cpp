@@ -19,6 +19,15 @@ void Semanticmap3D::initMaps(unsigned int size_x, unsigned int size_y, unsigned 
   semanticmap_ = new std::vector<DetectedObject *>[size_x * size_y * size_z];
 }
 
+void Semanticmap3D::resetMaps()
+{
+  boost::unique_lock<mutex_t> lock(*access_);
+  for(int i = 0; i < size_x_ * size_y_ * size_z_; ++i)
+    {
+      semanticmap_[i].clear();
+    }
+}
+
 void Semanticmap3D::setObject(unsigned int mx, unsigned int my, unsigned int mz, DetectedObject* obj)
 {
   semanticmap_[getIndex(mx, my, mz)].push_back(obj);

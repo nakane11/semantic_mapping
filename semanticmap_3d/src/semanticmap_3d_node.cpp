@@ -4,7 +4,7 @@
 int main(int argc, char** argv){
   ros::init(argc, argv, "semanticmap_node");
  
-  Semanticmap3D map();
+  Semanticmap3D map(0,0,0,0,0,0,0);
 
   ros::spin();
 

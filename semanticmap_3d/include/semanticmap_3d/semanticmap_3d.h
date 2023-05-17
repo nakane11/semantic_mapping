@@ -3,12 +3,15 @@
 
 #include <vector>
 #include <boost/thread.hpp>
+#include <geometry_msgs/Point.h>
 
 class DetectedObject
 {
 public:
   DetectedObject();
   DetectedObject(const DetectedObject& obj);
+protected:
+  std::vector<geometry_msgs::Point> points;
 };
   
 class Semanticmap3D
@@ -19,11 +22,6 @@ public:
                 double origin_x, double origin_y, double origin_z);
 
   Semanticmap3D(const Semanticmap3D& map);
-
-  // Semanticmap3D& operator=(const Semanticmap3D& map);
-
-  // bool copymapWindow(const Semanticmap3D& map, double win_origin_x, double win_origin_y, double win_origin_z,
-  //                    double win_size_x, double win_size_y, double win_size_z);
 
   inline unsigned int getIndex(unsigned int mx, unsigned int my, unsigned int mz) const
   {
@@ -43,6 +41,7 @@ protected:
   std::vector<DetectedObject *>* semanticmap_;
 
   virtual void initMaps(unsigned int size_x, unsigned int size_y, unsigned int size_z);
+  virtual void resetMaps();
   virtual void setObject(unsigned int mx, unsigned int my, unsigned int mz, DetectedObject* obj);
   
 };
