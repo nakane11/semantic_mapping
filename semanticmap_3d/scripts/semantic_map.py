@@ -2,7 +2,7 @@ import numpy as np
 
 class SemanticGridMapUtils(object):
 
-    def __init__(self, map_data=None, resolution, origin, width, height, depth):
+    def __init__(self, resolution, origin, width, height, depth, map_data=None):
         self._resolution = resolution
         self._origin = np.array(origin)
         self._width = width
@@ -22,6 +22,7 @@ class SemanticGridMapUtils(object):
         -------
         self._resolution : float
             resoulution of this map.
+            size of a cell.
         """
         return self._resolution
 
@@ -76,35 +77,36 @@ class SemanticGridMapUtils(object):
     def roi(self):
         return self._roi
 
-    # @staticmethod
-    # def from_rostopic(topic_name):
-    #     import nav_msgs.msg
+    @staticmethod
+    def from_rostopic(topic_name, depth):
+        import nav_msgs.msg
 
-    #     msg = one_shot_subscribe(topic_name,
-    #                              nav_msgs.msg.OccupancyGrid,
-    #                              queue_size=1)
+        msg = rospy.wait_for_message(topic_name,
+                                     nav_msgs.msg.OccupancyGrid)
 
-    #     resolution = msg.info.resolution
-    #     height = msg.info.height
-    #     width = msg.info.width
-    #     origin = (msg.info.origin.position.x,
-    #               msg.info.origin.position.y,
-    #               msg.info.origin.position.z)
-    #     map_data = msg.data
-    #     return OccupancyGridMapUtils(
-    #         map_data, resolution, origin, width, height)
+        resolution = msg.info.resolution
+        height = msg.info.height
+        width = msg.info.width
+        origin = (msg.info.origin.position.x,
+                  msg.info.origin.position.y,
+                  msg.info.origin.position.z)
+        return SemanticGridMapUtils(
+            resolution, origin, width, height, depth)
 
-    # def world_to_map(self, wx, wy):
-    #     mx = int((wx - self._origin[0]) / self._resolution)
-    #     my = int((wy - self._origin[1]) / self._resolution)
-    #     if not 0 <= mx < self._width or not 0 <= my < self._height:
-    #         return (-1, -1)
-    #     return (mx, my)
+    @staticmethod
+    def world_to_map(self, wx, wy, wz):
+        mx = int((wx - self._origin[0]) / self._resolution)
+        my = int((wy - self._origin[1]) / self._resolution)
+        mz = int((wz - self._origin[2]) / self._resolution)
+        if not 0 <= mx < self._width or not 0 <= my < self._height or not 0 <= mz < self._depth:
+            return (-1, -1, -1)
+        return (mx, my, mz)
 
-    # def map_to_world(self, mx, my):
-    #     wx = self._origin[0] + mx * self._resolution
-    #     wy = self._origin[1] + my * self._resolution
-    #     return (wx, wy)
+    def map_to_world(self, mx, my, mz):
+        wx = self._origin[0] + mx * self._resolution
+        wy = self._origin[1] + my * self._resolution
+        wz = self._origin[2] + mz * self._resolution
+        return (wx, wy, wz)
 
     # def batch_world_to_map(self, world_coords):
     #     """Batch of world_to_map.
@@ -153,13 +155,10 @@ class SemanticGridMapUtils(object):
         # self._map_data =
         return
 
-    def add_object(self, x, y, z, obj, prob=1.0):
+    def add_object(self, x, y, z, obj, prob=1.0, update_prob=False):
         if self._map_data[z][y][x] == None:
             self._map_data[z][y][x] = ObjectDict()
         self._map_data[z][y][x].add(obj, prob=1.0)
 
     def get_object_dict(self, x, y, z):
         return self._map_data[z][y][x]
-
-    # def add_object_from_(self, ):
-    #     obj = Object()
