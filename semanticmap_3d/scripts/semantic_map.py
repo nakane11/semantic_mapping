@@ -1,4 +1,5 @@
 import numpy as np
+from object_dict import *
 
 class SemanticGridMapUtils(object):
 
@@ -93,14 +94,13 @@ class SemanticGridMapUtils(object):
         return SemanticGridMapUtils(
             resolution, origin, width, height, depth)
 
-    @staticmethod
     def world_to_map(self, wx, wy, wz):
         mx = int((wx - self._origin[0]) / self._resolution)
         my = int((wy - self._origin[1]) / self._resolution)
         mz = int((wz - self._origin[2]) / self._resolution)
-        if not 0 <= mx < self._width or not 0 <= my < self._height or not 0 <= mz < self._depth:
+        if not abs(mx) < self._width/2 or not abs(my) < self._height or not 0 <= mz < self._depth:
             return (-1, -1, -1)
-        return (mx, my, mz)
+        return (int(mx+self._width/2), int(my+self._height/2), mz)
 
     def map_to_world(self, mx, my, mz):
         wx = self._origin[0] + mx * self._resolution
@@ -150,15 +150,52 @@ class SemanticGridMapUtils(object):
 
     def init_map(self):
         self._map_data = np.empty((self._depth, self._height, self._width), dtype=object)
+        print(self._map_data.shape)
 
     def load_map(self, raw_data):
-        # self._map_data =
         return
 
-    def add_object(self, x, y, z, obj, prob=1.0, update_prob=False):
+    def set_value(self, label, x, y, z, value):
         if self._map_data[z][y][x] == None:
             self._map_data[z][y][x] = ObjectDict()
-        self._map_data[z][y][x].add(obj, prob=1.0)
+        self._map_data[z][y][x].count(label, value)
 
-    def get_object_dict(self, x, y, z):
-        return self._map_data[z][y][x]
+    def get_value(self, label, x, y, z):
+        if self._map_data[z][y][x] == None:
+            return 0
+        else:
+            return self._map_data[z][y][x].count(label)
+
+    def add_object(self, label, roi=None, x=None, y=None, z=None):
+        if roi is not None:
+            for x in range(roi[0][0], roi[0][1]):
+                for y in range(roi[1][0], roi[1][1]):
+                    for z in range(roi[2][0], roi[2][1]):
+                        if self._map_data[z][y][x] == None:
+                            self._map_data[z][y][x] = ObjectDict()
+                        self._map_data[z][y][x].detect(label)
+        else:
+            if self._map_data[z][y][x] == None:
+                self._map_data[z][y][x] = ObjectDict()
+            self._map_data[z][y][x].detect(label)
+
+    def get_data(self, x, y, z):
+        if self._map_data[z][y][x] == None:
+            return {}
+        return self._map_data[z][y][x].objects
+
+    def get_value_map(self, label, roi=None):
+        result = np.zeros((self._depth, self._height, self._width))
+        if not roi:
+            for x in range(self._width):
+                for y in range(self._height):
+                    for z in range(self._depth):
+                        if self._map_data[z][y][x] is not None:
+                            result[z][y][x] = self._map_data[z][y][x].count(label)
+        else:
+            for x in range(roi[0][0], roi[0][1]):
+                for y in range(roi[1][0], roi[1][1]):
+                    for z in range(roi[2][0], roi[2][1]):
+                        if self._map_data[z][y][x] is not None:
+                            result[z][y][x] = self._map_data[z][y][x].count(label)
+        return result
