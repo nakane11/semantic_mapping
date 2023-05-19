@@ -103,8 +103,8 @@ class SemanticGridMapUtils(object):
         return (int(mx+self._width/2), int(my+self._height/2), mz)
 
     def map_to_world(self, mx, my, mz):
-        wx = self._origin[0] + mx * self._resolution
-        wy = self._origin[1] + my * self._resolution
+        wx = self._origin[0] + (mx-self._width/2) * self._resolution
+        wy = self._origin[1] + (my-self._height/2) * self._resolution
         wz = self._origin[2] + mz * self._resolution
         return (wx, wy, wz)
 
@@ -150,7 +150,6 @@ class SemanticGridMapUtils(object):
 
     def init_map(self):
         self._map_data = np.empty((self._depth, self._height, self._width), dtype=object)
-        print(self._map_data.shape)
 
     def load_map(self, raw_data):
         return
