@@ -8,6 +8,8 @@ import tf2_ros
 from jsk_topic_tools import ConnectionBasedTransport
 from jsk_recognition_msgs.msg import ClassificationResult, BoundingBoxArray
 from sensor_msgs.msg import PointCloud2
+
+from jsk_recognition_utils.color import labelcolormap
 from object_dict import *
 from semantic_map import *
 from visualize import *
@@ -25,8 +27,7 @@ class SemanticMappingNode(ConnectionBasedTransport):
         origin = self.get_robotpose()
         print(origin)
         if not origin: exit(1)
-        self.map = SemanticGridMapUtils(resolution=0.025, origin=origin, width=400, height=200, depth=200)
-        # 50*50*10 m
+        self.map = SemanticGridMapUtils(resolution=self.resolution, origin=origin, width=400, height=400, depth=200)
         self._pub = self.advertise("~output/cloud", PointCloud2, queue_size=1)
 
     def get_robotpose(self):
@@ -57,6 +58,7 @@ class SemanticMappingNode(ConnectionBasedTransport):
             sub.unregister()
 
     def add_from_msg(self, cls_msg, bbox_msg):
+        print("sub")
         try:
             pykdl_transform_base_to_camera = tf2_geometry_msgs.transform_to_kdl(
                 self._tf_buffer.lookup_transform(
@@ -70,37 +72,39 @@ class SemanticMappingNode(ConnectionBasedTransport):
             rospy.logwarn('{}'.format(e))
             return
         for label, box in zip(cls_msg.label_names, bbox_msg.boxes):
-            roi = [[box.pose.position.x - box.dimensions.x/2, box.pose.position.x + box.dimensions.x/2],
-                   [box.pose.position.y - box.dimensions.y/2, box.pose.position.y + box.dimensions.y/2],
-                   [box.pose.position.z - box.dimensions.z/2, box.pose.position.z + box.dimensions.z/2]]
-            for x_idx in range(int(box.dimensions.x/self.resolution)):
-                x = box.pose.position.x - box.dimensions.x/2 + self.resolution * x_idx
-                for y_idx in range(int(box.dimensions.y/self.resolution)):
-                    y = box.pose.position.y - box.dimensions.y/2 + self.resolution * y_idx
-                    for z_idx in range(int(box.dimensions.z/self.resolution)):
-                        z = box.pose.position.z - box.dimensions.z/2 + self.resolution * z_idx
-                        x, y, z = pykdl_transform_base_to_camera * PyKDL.Vector(x, y, z)
-                        mx, my, mz = self.map.world_to_map(x, y, z)
-                        self.map.add_object(label, x=mx, y=my, z=mz)
-        data = self.map.get_value_map(label)
+            x,y,z = pykdl_transform_base_to_camera * PyKDL.Vector(box.pose.position.x,
+                                                                  box.pose.position.y,
+                                                                  box.pose.position.z)
+            center = self.map.world_to_map(x, y, z)
+            dimension = int(min(box.dimensions.x,
+                                box.dimensions.y,
+                                box.dimensions.z)/self.map.resolution/2)
+            if dimension == 0: continue
+            self.map.add_object(label, center, dimension)
+
         header = cls_msg.header
         header.frame_id = "map"
-        self._pub.publish(self.array_to_msg(header, data))
+        self.publish_pc(header)
 
-    def array_to_msg(self, header, arr):
-        x_idx, y_idx, z_idx = np.where(arr)
-        points = np.zeros((0,3), dtype=np.float32)
-        colors = np.zeros((0,3), dtype=np.float32)
-        color_norm = (1 - arr / np.max(arr)) * 255
-        for mx, my, mz in zip(x_idx, y_idx, z_idx):
-            wx, wy, wz = self.map.map_to_world(mx, my, mz)
-            points = np.append(points, np.array([[wx, wy, wz]]), axis=0)
-            c = color_norm[mx][my][mz]
-            colors = np.append(colors, np.array([[c*0.0, c*1.0, c*0.0]]), axis=0)
-        print(points.shape)
-        print(colors.shape)
-        return create_cloud_xyzrgb(header, points, colors)
+    def publish_pc(self, header):
+        data = self.map.get_map()
+        points = np.zeros((0,3))
+        colors =np.zeros((0,3))
 
+        for i,v in enumerate(data.values()):
+            idx = np.where(v)
+            wx, wy, wz = map(lambda x: x.reshape([-1,1]),
+                             self.map.map_to_world(idx[0],idx[1],idx[2]))
+            points = np.vstack((points, np.hstack((wx, wy, wz)).astype(np.float32)))
+
+            h_arr = 127 + labelcolormap()[i]/2
+            color_norm = v / np.max(v) * 255
+            c = color_norm[idx].reshape([-1,1])
+            c_arr = np.dot(c, h_arr.reshape((1,-1)))
+            colors = np.vstack((colors, c_arr))
+
+        pub_msg = create_cloud_xyzrgb(header, points, colors)
+        self._pub.publish(pub_msg)
 
 if __name__ == '__main__':
     rospy.init_node('semantic_mapping_node')

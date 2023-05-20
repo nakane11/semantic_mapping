@@ -13,5 +13,11 @@ def create_cloud_xyzrgb(header, points, colors):
 
     data = np.hstack((points, colors)).astype(np.float32)
     return pcd2.create_cloud(header, fields, data)
+
+def str2int(text):
+    s = 0
+    for i in text:
+        s += ord(i)
+    return s
     
     

@@ -1,5 +1,5 @@
 import numpy as np
-from object_dict import *
+from collections import defaultdict
 
 class SemanticGridMapUtils(object):
 
@@ -9,11 +9,13 @@ class SemanticGridMapUtils(object):
         self._width = width
         self._height = height
         self._depth = depth
-        self._roi = None
-        if map_data is not None:
-            self.load_map(map_data)
-        else:
-            self.init_map()
+        self._label2voxel = defaultdict(lambda: np.zeros(
+            (self._width, self._height, self._depth), dtype=np.int64))
+        # self._roi = None
+        # if map_data is not None:
+        #     self.load_map(map_data)
+        # else:
+        #     self.init_map()
 
     @property
     def resolution(self):
@@ -60,23 +62,25 @@ class SemanticGridMapUtils(object):
         """
         return self._width
 
-    @property
-    def data(self):
-        """Return data of 3D grid map.
+    # def data(self, label=None):
+    #     """Return data of 3D grid map.
 
-        Each cel represents the .
+    #     Each cel represents the .
 
-        Returns
-        -------
-        self._map_data : numpy.ndarray
-            Occupancy probabilities are in the range [0,100].
-            Unknown is -1.
-        """
-        return self._map_data
+    #     Returns
+    #     -------
+    #     self._map_data : numpy.ndarray
+    #         Occupancy probabilities are in the range [0,100].
+    #         Unknown is -1.
+    #     """
+    #     if label is not None:
+    #         return self._label2voxel
+    #     else:
+    #         return self._label2voxel.get(label)
 
-    @property
-    def roi(self):
-        return self._roi
+    # @property
+    # def roi(self):
+    #     return self._roi
 
     @staticmethod
     def from_rostopic(topic_name, depth):
@@ -95,12 +99,12 @@ class SemanticGridMapUtils(object):
             resolution, origin, width, height, depth)
 
     def world_to_map(self, wx, wy, wz):
-        mx = int((wx - self._origin[0]) / self._resolution)
-        my = int((wy - self._origin[1]) / self._resolution)
-        mz = int((wz - self._origin[2]) / self._resolution)
+        mx = (wx - self._origin[0]) / self._resolution
+        my = (wy - self._origin[1]) / self._resolution
+        mz = (wz - self._origin[2]) / self._resolution
         if not abs(mx) < self._width/2 or not abs(my) < self._height or not 0 <= mz < self._depth:
             return (-1, -1, -1)
-        return (int(mx+self._width/2), int(my+self._height/2), mz)
+        return (int(mx+self._width/2), int(my+self._height/2), int(mz))
 
     def map_to_world(self, mx, my, mz):
         wx = self._origin[0] + (mx-self._width/2) * self._resolution
@@ -148,53 +152,40 @@ class SemanticGridMapUtils(object):
     #     max_x = x.max() + 1
     #     self._roi = (min_y, min_x, max_y, max_x)
 
-    def init_map(self):
-        self._map_data = np.empty((self._depth, self._height, self._width), dtype=object)
+    # def init_map(self):
+    #     self._map_data = np.empty((self._depth, self._height, self._width), dtype=object)
 
-    def load_map(self, raw_data):
-        return
+    # def load_map(self, raw_data):
+    #     return
 
-    def set_value(self, label, x, y, z, value):
-        if self._map_data[z][y][x] == None:
-            self._map_data[z][y][x] = ObjectDict()
-        self._map_data[z][y][x].count(label, value)
+    def set_value(self, label, x, y, z, val=1, reset=False):
+        if reset:
+            self._label2voxel[label][x][y][z] = val
+        else:
+            self._label2voxel[label][x][y][z] += val
 
     def get_value(self, label, x, y, z):
-        if self._map_data[z][y][x] == None:
-            return 0
-        else:
-            return self._map_data[z][y][x].count(label)
+        return self._label2voxel[label][x][y][z]
 
-    def add_object(self, label, roi=None, x=None, y=None, z=None):
-        if roi is not None:
-            for x in range(roi[0][0], roi[0][1]):
-                for y in range(roi[1][0], roi[1][1]):
-                    for z in range(roi[2][0], roi[2][1]):
-                        if self._map_data[z][y][x] == None:
-                            self._map_data[z][y][x] = ObjectDict()
-                        self._map_data[z][y][x].detect(label)
-        else:
-            if self._map_data[z][y][x] == None:
-                self._map_data[z][y][x] = ObjectDict()
-            self._map_data[z][y][x].detect(label)
+    def add_object_by_roi(self, label, roi, cnt=1):
+        self._label2voxel[label][roi[0][0]:roi[0][1],
+                                 roi[1][0]:roi[1][1],
+                                 roi[2][0]:roi[2][1]] += 1
 
-    def get_data(self, x, y, z):
-        if self._map_data[z][y][x] == None:
-            return {}
-        return self._map_data[z][y][x].objects
+    def add_object(self, label, center, dim, cnt=1):
+        roi = [[center[0]-dim, center[0]+dim],
+               [center[1]-dim, center[1]+dim],
+               [center[2]-dim, center[2]+dim]]
+        self._label2voxel[label][roi[0][0]:roi[0][1],
+                                 roi[1][0]:roi[1][1],
+                                 roi[2][0]:roi[2][1]] += 1
 
-    def get_value_map(self, label, roi=None):
-        result = np.zeros((self._depth, self._height, self._width))
-        if not roi:
-            for x in range(self._width):
-                for y in range(self._height):
-                    for z in range(self._depth):
-                        if self._map_data[z][y][x] is not None:
-                            result[z][y][x] = self._map_data[z][y][x].count(label)
-        else:
-            for x in range(roi[0][0], roi[0][1]):
-                for y in range(roi[1][0], roi[1][1]):
-                    for z in range(roi[2][0], roi[2][1]):
-                        if self._map_data[z][y][x] is not None:
-                            result[z][y][x] = self._map_data[z][y][x].count(label)
-        return result
+    def get_map(self, label=None, roi=None):
+        if label is None:
+            return self._label2voxel
+        if roi is None:
+            return self._label2voxel[label]
+
+        return self._label2voxel[label][roi[0][0]:roi[0][1],
+                                        roi[1][0]:roi[1][1],
+                                        roi[2][0]:roi[2][1]]
