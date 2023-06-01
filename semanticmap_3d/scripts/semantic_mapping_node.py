@@ -8,7 +8,7 @@ import tf2_ros
 from jsk_topic_tools import ConnectionBasedTransport
 from jsk_recognition_msgs.msg import ClassificationResult, BoundingBoxArray
 from sensor_msgs.msg import PointCloud2
-from geometry_msgs.msg import PoseArray, Pose
+from visualization_msgs.msg import MarkerArray, Marker
 
 from jsk_recognition_utils.color import labelcolormap
 from object_dict import *
@@ -31,7 +31,7 @@ class SemanticMappingNode(ConnectionBasedTransport):
         if not origin: exit(1)
         self.map = SemanticGridMapUtils(resolution=self.resolution, origin=origin, width=400, height=400, depth=200)
         self._pub = self.advertise("~output/cloud", PointCloud2, queue_size=1)
-        self._pub_center = self.advertise("~output/center", PoseArray, queue_size=1)
+        self._pub_center = self.advertise("~output/center", MarkerArray, queue_size=1)
 
     def get_robotpose(self):
         try:
@@ -61,7 +61,6 @@ class SemanticMappingNode(ConnectionBasedTransport):
             sub.unregister()
 
     def add_from_msg(self, cls_msg, bbox_msg):
-        print("sub")
         try:
             pykdl_transform_base_to_camera = tf2_geometry_msgs.transform_to_kdl(
                 self._tf_buffer.lookup_transform(
@@ -93,9 +92,11 @@ class SemanticMappingNode(ConnectionBasedTransport):
         data = self.map.get_map()
         points = np.zeros((0,3))
         colors =np.zeros((0,3))
+        markers = []
+        id = 0
 
         for i,v in enumerate(data.values()):
-            print(list(data.keys())[i])
+            h_arr = 127 + labelcolormap()[i]/2
             idx = np.where(v)
             wx, wy, wz = map(lambda x: x.reshape([-1,1]),
                              self.map.map_to_world(idx[0],idx[1],idx[2]))
@@ -103,10 +104,27 @@ class SemanticMappingNode(ConnectionBasedTransport):
             if point.shape[0] <= 0:
                 continue
             centers = x_means(point)
-            self.publish_cog(centers, header)
-            points = np.vstack((points, point))
+            for p in centers:
+                m = Marker(header=header)
+                m.type = Marker.SPHERE
+                m.action = Marker.ADD
+                m.color.r = h_arr[0]/255.0
+                m.color.g = h_arr[1]/255.0
+                m.color.b = h_arr[2]/255.0
+                m.color.a = 1.0
+                m.pose.position.x = p[0]
+                m.pose.position.y = p[1]
+                m.pose.position.z = p[2]
+                m.pose.orientation.w = 1.0
+                m.scale.x = 0.05
+                m.scale.y = 0.05
+                m.scale.z = 0.05
+                m.id = id
+                id += 1
+                markers.append(m)
 
-            h_arr = 127 + labelcolormap()[i]/2
+            print(list(data.keys())[i], len(centers))
+            points = np.vstack((points, point))
             color_norm = v / np.max(v) * 255
             c = color_norm[idx].reshape([-1,1])
             c_arr = np.dot(c, h_arr.reshape((1,-1)))
@@ -115,18 +133,8 @@ class SemanticMappingNode(ConnectionBasedTransport):
         pub_msg = create_cloud_xyzrgb(header, points, colors)
         self._pub.publish(pub_msg)
 
-    def publish_cog(self, centers, header):
-        pub_msg = PoseArray(header = header)
-        arr = []
-        for p in centers:
-            pose = Pose()
-            pose.position.x = p[0]
-            pose.position.y = p[1]
-            pose.position.z = p[2]
-            pose.orientation.w = 1.0
-            arr.append(pose)
-        pub_msg.poses = arr
-        self._pub_center.publish(pub_msg)
+        pub_marker_array = MarkerArray(markers=markers)
+        self._pub_center.publish(pub_marker_array)
 
 if __name__ == '__main__':
     rospy.init_node('semantic_mapping_node')
