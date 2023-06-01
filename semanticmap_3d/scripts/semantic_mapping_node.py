@@ -8,11 +8,13 @@ import tf2_ros
 from jsk_topic_tools import ConnectionBasedTransport
 from jsk_recognition_msgs.msg import ClassificationResult, BoundingBoxArray
 from sensor_msgs.msg import PointCloud2
+from geometry_msgs.msg import PoseArray, Pose
 
 from jsk_recognition_utils.color import labelcolormap
 from object_dict import *
 from semantic_map import *
 from visualize import *
+from clustering import x_means
 
 class SemanticMappingNode(ConnectionBasedTransport):
 
@@ -29,6 +31,7 @@ class SemanticMappingNode(ConnectionBasedTransport):
         if not origin: exit(1)
         self.map = SemanticGridMapUtils(resolution=self.resolution, origin=origin, width=400, height=400, depth=200)
         self._pub = self.advertise("~output/cloud", PointCloud2, queue_size=1)
+        self._pub_center = self.advertise("~output/center", PoseArray, queue_size=1)
 
     def get_robotpose(self):
         try:
@@ -92,10 +95,16 @@ class SemanticMappingNode(ConnectionBasedTransport):
         colors =np.zeros((0,3))
 
         for i,v in enumerate(data.values()):
+            print(list(data.keys())[i])
             idx = np.where(v)
             wx, wy, wz = map(lambda x: x.reshape([-1,1]),
                              self.map.map_to_world(idx[0],idx[1],idx[2]))
-            points = np.vstack((points, np.hstack((wx, wy, wz)).astype(np.float32)))
+            point = np.hstack((wx, wy, wz)).astype(np.float32)
+            if point.shape[0] <= 0:
+                continue
+            centers = x_means(point)
+            self.publish_cog(centers, header)
+            points = np.vstack((points, point))
 
             h_arr = 127 + labelcolormap()[i]/2
             color_norm = v / np.max(v) * 255
@@ -105,6 +114,19 @@ class SemanticMappingNode(ConnectionBasedTransport):
 
         pub_msg = create_cloud_xyzrgb(header, points, colors)
         self._pub.publish(pub_msg)
+
+    def publish_cog(self, centers, header):
+        pub_msg = PoseArray(header = header)
+        arr = []
+        for p in centers:
+            pose = Pose()
+            pose.position.x = p[0]
+            pose.position.y = p[1]
+            pose.position.z = p[2]
+            pose.orientation.w = 1.0
+            arr.append(pose)
+        pub_msg.poses = arr
+        self._pub_center.publish(pub_msg)
 
 if __name__ == '__main__':
     rospy.init_node('semantic_mapping_node')
