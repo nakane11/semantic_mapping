@@ -1,21 +1,22 @@
 <launch>
-  <arg name="INPUT_IMAGE" default="/kinect_head/rgb/image_rect_color" />  
+  <arg name="INPUT_IMAGE" default="/kinect_head/rgb/image_rect_color" />
   <arg name="INPUT_CLOUD" default="/kinect_head/depth_registered/throttled/points" />
+  <arg name="MANAGER" default="/kinect_head/kinect_head_c2_nodelet_manager" />
   
   <include file="sample_fg.launch" />
     
   <!-- <node pkg="nodelet" type="nodelet" name="sample_manager" -->
   <!--       args="manager" /> -->
 
-  <node name="pointcloud_mux"
-        pkg="topic_tools" type="mux"
-        args="/tilt_scan_filtered_mux /tilt_scan_filtered/navigation/without_hand /tilt_scan_filtered/navigation" >
-    <remap from="mux" to="pointcloud_mux"/>
-  </node>
+  <!-- <node name="pointcloud_mux" -->
+  <!--       pkg="topic_tools" type="mux" -->
+  <!--       args="/tilt_scan_filtered_mux /tilt_scan_filtered/navigation/without_hand /tilt_scan_filtered/navigation" > -->
+  <!--   <remap from="mux" to="pointcloud_mux"/> -->
+  <!-- </node> -->
 
   <node name="multi_euclidean_clustering"
         pkg="nodelet" type="nodelet"
-        args="load jsk_pcl/EuclideanClustering /kinect_head/kinect_head_c2_nodelet_manager"
+        args="load jsk_pcl/EuclideanClustering $(arg MANAGER)"
         output="screen">
     <remap from="~input/cluster_indices" to="/fg_node/output/cluster_indices" />
     <remap from="~input" to="$(arg INPUT_CLOUD)" />
@@ -34,7 +35,7 @@
 
   <node name="multi_euclidean_cluster_point_indices_decomposer"
         pkg="nodelet" type="nodelet"
-        args="load jsk_pcl/ClusterPointIndicesDecomposer /kinect_head/kinect_head_c2_nodelet_manager">
+        args="load jsk_pcl/ClusterPointIndicesDecomposer $(arg MANAGER)">
     <remap from="~input" to="$(arg INPUT_CLOUD)" />
     <remap from="~target" to="/multi_euclidean_clustering/output" />
     <rosparam>
@@ -45,5 +46,15 @@
     </rosparam>
   </node>
 
+  <node name="pointcloud_to_pcd" type="nodelet" pkg="nodelet"
+        args="load jsk_pcl_utils/PointCloudToPCD $(arg MANAGER)" output="screen" >
+    <remap from="~input" to="/semantic_mapping_node/output_save_pc" />
+    <rosparam subst_value="true">
+      prefix: $(find jsk_pcl_ros_utils)/test_data/sample_pcd_
+      duration: 0.0
+      binary: true
+      compressed: true
+    </rosparam>
+  </node>
   
 </launch>
