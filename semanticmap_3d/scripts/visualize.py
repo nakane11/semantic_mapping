@@ -1,6 +1,7 @@
 from sensor_msgs.msg import PointCloud2,PointField
 import sensor_msgs.point_cloud2 as pcd2
 import numpy as np
+from visualization_msgs.msg import Marker
 
 def create_cloud_xyzrgb(header, points, colors):
 
@@ -19,5 +20,23 @@ def str2int(text):
     for i in text:
         s += ord(i)
     return s
+
+def make_sphere(header, pose, color, id):
+    m = Marker(header=header)
+    m.type = Marker.SPHERE
+    m.action = Marker.ADD
+    m.color.r = color[0]/255.0
+    m.color.g = color[1]/255.0
+    m.color.b = color[2]/255.0
+    m.color.a = 1.0
+    m.pose.position.x = pose[0]
+    m.pose.position.y = pose[1]
+    m.pose.position.z = pose[2]
+    m.pose.orientation.w = 1.0
+    m.scale.x = 0.05
+    m.scale.y = 0.05
+    m.scale.z = 0.05
+    m.id = id
+    return m
     
     

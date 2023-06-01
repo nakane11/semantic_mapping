@@ -8,7 +8,7 @@ import tf2_ros
 from jsk_topic_tools import ConnectionBasedTransport
 from jsk_recognition_msgs.msg import ClassificationResult, BoundingBoxArray
 from sensor_msgs.msg import PointCloud2
-from visualization_msgs.msg import MarkerArray, Marker
+from visualization_msgs.msg import MarkerArray
 
 from jsk_recognition_utils.color import labelcolormap
 from object_dict import *
@@ -103,23 +103,10 @@ class SemanticMappingNode(ConnectionBasedTransport):
             point = np.hstack((wx, wy, wz)).astype(np.float32)
             if point.shape[0] <= 0:
                 continue
-            centers = x_means(point)
-            for p in centers:
-                m = Marker(header=header)
-                m.type = Marker.SPHERE
-                m.action = Marker.ADD
-                m.color.r = h_arr[0]/255.0
-                m.color.g = h_arr[1]/255.0
-                m.color.b = h_arr[2]/255.0
-                m.color.a = 1.0
-                m.pose.position.x = p[0]
-                m.pose.position.y = p[1]
-                m.pose.position.z = p[2]
-                m.pose.orientation.w = 1.0
-                m.scale.x = 0.05
-                m.scale.y = 0.05
-                m.scale.z = 0.05
-                m.id = id
+            centers, clusters = x_means(point)
+            for p, q in zip(centers, clusters):
+                print(len(q))
+                m = make_sphere(header, p, h_arr, id)
                 id += 1
                 markers.append(m)
 
