@@ -9,6 +9,7 @@ from jsk_topic_tools import ConnectionBasedTransport
 from jsk_recognition_msgs.msg import ClassificationResult, BoundingBoxArray
 from sensor_msgs.msg import PointCloud2
 from visualization_msgs.msg import MarkerArray
+from std_msgs.msg import Header
 
 from jsk_recognition_utils.color import labelcolormap
 from object_dict import *
@@ -32,6 +33,7 @@ class SemanticMappingNode(ConnectionBasedTransport):
         self.map = SemanticGridMapUtils(resolution=self.resolution, origin=origin, width=400, height=400, depth=200)
         self._pub = self.advertise("~output/cloud", PointCloud2, queue_size=1)
         self._pub_center = self.advertise("~output/center", MarkerArray, queue_size=1)
+        self._pub_save_pc = self.advertise("~output/save_pc", PointCloud2, queue_size=1)
 
     def get_robotpose(self):
         try:
@@ -90,38 +92,55 @@ class SemanticMappingNode(ConnectionBasedTransport):
 
     def publish_pc(self, header):
         data = self.map.get_map()
-        points = np.zeros((0,3))
+        multiple_points = np.zeros((0,3))
         colors =np.zeros((0,3))
         markers = []
         id = 0
 
         for i,v in enumerate(data.values()):
-            h_arr = 127 + labelcolormap()[i]/2
-            idx = np.where(v)
-            wx, wy, wz = map(lambda x: x.reshape([-1,1]),
-                             self.map.map_to_world(idx[0],idx[1],idx[2]))
-            point = np.hstack((wx, wy, wz)).astype(np.float32)
-            if point.shape[0] <= 0:
+            points, idx = self.extract_pt(v)
+            if points.shape[0] <= 0:
                 continue
-            centers, clusters = x_means(point)
-            for p, q in zip(centers, clusters):
-                print(len(q))
-                m = make_sphere(header, p, h_arr, id)
-                id += 1
-                markers.append(m)
+            multiple_points = np.vstack((multiple_points, points))
 
-            print(list(data.keys())[i], len(centers))
-            points = np.vstack((points, point))
+            h_arr = 127 + labelcolormap()[i]/2
             color_norm = v / np.max(v) * 255
             c = color_norm[idx].reshape([-1,1])
             c_arr = np.dot(c, h_arr.reshape((1,-1)))
             colors = np.vstack((colors, c_arr))
 
-        pub_msg = create_cloud_xyzrgb(header, points, colors)
+            centers, clusters = x_means(points)
+            for p, q in zip(centers, clusters):
+                print(len(q))
+                m = make_sphere(header, p, h_arr, id)
+                id += 1
+                markers.append(m)
+            print(list(data.keys())[i], len(centers))
+
+        pub_msg = create_cloud_xyzrgb(header, multiple_points, colors)
         self._pub.publish(pub_msg)
 
         pub_marker_array = MarkerArray(markers=markers)
         self._pub_center.publish(pub_marker_array)
+
+    def extract_pt(self, arr):
+        idx = np.where(arr)
+        wx, wy, wz = map(lambda x: x.reshape([-1,1]),
+                         self.map.map_to_world(idx[0],idx[1],idx[2]))
+        points = np.hstack((wx, wy, wz)).astype(np.float32)
+        return points, idx
+
+    def save_pc(self):
+        header = Header()
+        header.stamp = rospy.Time.now()
+        header.frame_id = 'map'
+        data = self.map.get_map()
+        for k,v in zip(list(data.keys()), data.values()):
+            points, idx = self.extract_pt(v)
+            pub_msg = create_cloud_xyz(header, points)
+            # call service
+            # specify file name
+            self._pub_save_pc.publish(pub_msg)
 
 if __name__ == '__main__':
     rospy.init_node('semantic_mapping_node')
