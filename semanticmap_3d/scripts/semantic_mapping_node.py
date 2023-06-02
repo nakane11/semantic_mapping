@@ -10,6 +10,8 @@ from jsk_topic_tools import ConnectionBasedTransport
 from eos import make_fancy_output_dir
 from pathlib import Path
 import open3d as o3d
+import os
+import yaml
 
 from jsk_recognition_msgs.msg import ClassificationResult, BoundingBoxArray
 from sensor_msgs.msg import PointCloud2
@@ -139,14 +141,35 @@ class SemanticMappingNode(ConnectionBasedTransport):
     def save_map(self, req=None):
         rospack = rospkg.RosPack()
         outdir = Path(make_fancy_output_dir(rospack.get_path('semanticmap_3d'), no_save=True)).resolve()
+
+        outpath = str(outdir / 'map.yaml')
+        yml = {'resolution': self.map.resolution, 'origin': self.map.origin.tolist()}
+        with open(outpath, 'w') as file:
+            yaml.dump(yml, file)
+
         data = self.map.get_map()
         for k,v in zip(list(data.keys()), data.values()):
+            # save pointcloud
             outpath = str(outdir / (k + '.pcd'))
             points, idx = self.extract_pt(v)
             pcd = o3d.geometry.PointCloud()
             pcd.points = o3d.utility.Vector3dVector(points)
             o3d.io.write_point_cloud(outpath, pcd)
+            # save numpy array
+            outpath = str(outdir / k)
+            np.save(outpath, v)
         return EmptyResponse()
+
+    # def load_map(self, input_dir):
+    #     for filename in os.listdir(input_dir):
+    #         f = os.path.join(input_dir, filename)
+    #         if os.path.isfile(f) and filename.endswith('.npy'):
+    #             arr = np.load(f)
+            #     pcd_load = o3d.io.read_point_cloud(f)
+            #     xyz_load = np.asarray(pcd_load.points)
+            # key = os.path.splitext(filename)[0]
+            # mx, my, mz = map(lambda x: x.reshape([-1,1]),
+            #                  self.map.world_to_map(xyz_load[0],xyz_load[1],xyz_load[2]))
 
 if __name__ == '__main__':
     rospy.init_node('semantic_mapping_node')
