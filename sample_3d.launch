@@ -45,16 +45,5 @@
       queue_size: 100
     </rosparam>
   </node>
-
-  <node name="pointcloud_to_pcd" type="nodelet" pkg="nodelet"
-        args="load jsk_pcl_utils/PointCloudToPCD $(arg MANAGER)" output="screen" >
-    <remap from="~input" to="/semantic_mapping_node/output_save_pc" />
-    <rosparam subst_value="true">
-      prefix: $(find jsk_pcl_ros_utils)/test_data/sample_pcd_
-      duration: 0.0
-      binary: true
-      compressed: true
-    </rosparam>
-  </node>
   
 </launch>

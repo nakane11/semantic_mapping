@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
 
+import rospkg
 import rospy
 import message_filters
 import PyKDL
 import tf2_geometry_msgs
 import tf2_ros
 from jsk_topic_tools import ConnectionBasedTransport
+from eos import make_fancy_output_dir
+from pathlib import Path
+import open3d as o3d
+
 from jsk_recognition_msgs.msg import ClassificationResult, BoundingBoxArray
 from sensor_msgs.msg import PointCloud2
 from visualization_msgs.msg import MarkerArray
-from std_msgs.msg import Header
+from std_srvs.srv import Empty, EmptyResponse
 
 from jsk_recognition_utils.color import labelcolormap
 from object_dict import *
@@ -33,7 +38,8 @@ class SemanticMappingNode(ConnectionBasedTransport):
         self.map = SemanticGridMapUtils(resolution=self.resolution, origin=origin, width=400, height=400, depth=200)
         self._pub = self.advertise("~output/cloud", PointCloud2, queue_size=1)
         self._pub_center = self.advertise("~output/center", MarkerArray, queue_size=1)
-        self._pub_save_pc = self.advertise("~output/save_pc", PointCloud2, queue_size=1)
+        rospy.Service('~save_map', Empty, self.save_map)
+        rospy.on_shutdown(self.save_map)
 
     def get_robotpose(self):
         try:
@@ -130,17 +136,17 @@ class SemanticMappingNode(ConnectionBasedTransport):
         points = np.hstack((wx, wy, wz)).astype(np.float32)
         return points, idx
 
-    def save_pc(self):
-        header = Header()
-        header.stamp = rospy.Time.now()
-        header.frame_id = 'map'
+    def save_map(self, req=None):
+        rospack = rospkg.RosPack()
+        outdir = Path(make_fancy_output_dir(rospack.get_path('semanticmap_3d'), no_save=True)).resolve()
         data = self.map.get_map()
         for k,v in zip(list(data.keys()), data.values()):
+            outpath = str(outdir / (k + '.pcd'))
             points, idx = self.extract_pt(v)
-            pub_msg = create_cloud_xyz(header, points)
-            # call service
-            # specify file name
-            self._pub_save_pc.publish(pub_msg)
+            pcd = o3d.geometry.PointCloud()
+            pcd.points = o3d.utility.Vector3dVector(points)
+            o3d.io.write_point_cloud(outpath, pcd)
+        return EmptyResponse()
 
 if __name__ == '__main__':
     rospy.init_node('semantic_mapping_node')
