@@ -62,6 +62,17 @@ class SemanticGridMapUtils(object):
         """
         return self._width
 
+    @property
+    def depth(self):
+        """Return depth
+
+        Returns
+        -------
+        self._depth : int
+            depth of map.
+        """
+        return self._depth
+
     # def data(self, label=None):
     #     """Return data of 3D grid map.
 
@@ -189,3 +200,5 @@ class SemanticGridMapUtils(object):
         return self._label2voxel[label][roi[0][0]:roi[0][1],
                                         roi[1][0]:roi[1][1],
                                         roi[2][0]:roi[2][1]]
+    def add_array(self, label, arr):
+        self._label2voxel[label] = arr

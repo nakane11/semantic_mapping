@@ -17,6 +17,7 @@ from jsk_recognition_msgs.msg import ClassificationResult, BoundingBoxArray
 from sensor_msgs.msg import PointCloud2
 from visualization_msgs.msg import MarkerArray
 from std_srvs.srv import Empty, EmptyResponse
+from std_msgs.msg import Header
 
 from jsk_recognition_utils.color import labelcolormap
 from object_dict import *
@@ -34,12 +35,17 @@ class SemanticMappingNode(ConnectionBasedTransport):
         self._tf_listener = tf2_ros.TransformListener(self._tf_buffer)
         self.resolution = rospy.get_param("~resolution", 0.025)
 
+        self._pub = self.advertise("~output/cloud", PointCloud2, queue_size=1)
+        self._pub_center = self.advertise("~output/center", MarkerArray, queue_size=1)
+
         origin = self.get_robotpose()
         print(origin)
         if not origin: exit(1)
-        self.map = SemanticGridMapUtils(resolution=self.resolution, origin=origin, width=400, height=400, depth=200)
-        self._pub = self.advertise("~output/cloud", PointCloud2, queue_size=1)
-        self._pub_center = self.advertise("~output/center", MarkerArray, queue_size=1)
+        self.input_dir = rospy.get_param("~input_dir", '')
+        if self.input_dir != '':
+            self.load_map(self.input_dir)
+        else:
+            self.map = SemanticGridMapUtils(resolution=self.resolution, origin=origin, width=400, height=400, depth=200)
         rospy.Service('~save_map', Empty, self.save_map)
         rospy.on_shutdown(self.save_map)
 
@@ -142,8 +148,8 @@ class SemanticMappingNode(ConnectionBasedTransport):
         rospack = rospkg.RosPack()
         outdir = Path(make_fancy_output_dir(rospack.get_path('semanticmap_3d'), no_save=True)).resolve()
 
-        outpath = str(outdir / 'map.yaml')
-        yml = {'resolution': self.map.resolution, 'origin': self.map.origin.tolist()}
+        outpath = str(outdir / 'config.yaml')
+        yml = {'resolution': self.map.resolution, 'origin': self.map.origin.tolist(), 'width': self.map.width, 'height': self.map.height, 'depth': self.map.depth}
         with open(outpath, 'w') as file:
             yaml.dump(yml, file)
 
@@ -160,11 +166,23 @@ class SemanticMappingNode(ConnectionBasedTransport):
             np.save(outpath, v)
         return EmptyResponse()
 
-    # def load_map(self, input_dir):
-    #     for filename in os.listdir(input_dir):
-    #         f = os.path.join(input_dir, filename)
-    #         if os.path.isfile(f) and filename.endswith('.npy'):
-    #             arr = np.load(f)
+    def load_map(self, input_dir):
+        f = os.path.join(input_dir, 'config.yaml')
+        with open(f, 'r') as yml:
+            config = yaml.safe_load(yml)
+        self.map = SemanticGridMapUtils(resolution=config['resolution'], origin=config['origin'],
+                                        width=config['width'], height=config['height'], depth=config['depth'])
+
+        for filename in os.listdir(input_dir):
+            f = os.path.join(input_dir, filename)
+            if os.path.isfile(f) and filename.endswith('.npy'):
+                arr = np.load(f)
+                label = os.path.splitext(filename)[0]
+                self.map.add_array(label, arr)
+                header = Header()
+                header.stamp = rospy.Time.now()
+                header.frame_id = "map"
+                self.publish_pc(header)
             #     pcd_load = o3d.io.read_point_cloud(f)
             #     xyz_load = np.asarray(pcd_load.points)
             # key = os.path.splitext(filename)[0]
